@@ -19,6 +19,10 @@
   <property name="windowTitle">
    <string>Alice Installer</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>../images/icon.png</normaloff>../images/icon.png</iconset>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <property name="maximumSize">
     <size>
@@ -48,7 +52,7 @@
      <string notr="true">background-color: #111118;</string>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>3</number>
     </property>
     <widget class="QWidget" name="Start_app">
      <property name="maximumSize">
@@ -107,6 +111,12 @@
            <family>Work Sans</family>
            <pointsize>34</pointsize>
           </font>
+         </property>
+         <property name="mouseTracking">
+          <bool>false</bool>
+         </property>
+         <property name="toolTipDuration">
+          <number>0</number>
          </property>
          <property name="autoFillBackground">
           <bool>false</bool>
@@ -660,5 +670,22 @@ background:transparent;</string>
  <resources>
   <include location="../resources.qrc"/>
  </resources>
- <connections/>
+ <connections>
+  <connection>
+   <sender>Install_start</sender>
+   <signal>clicked()</signal>
+   <receiver>StatusBar</receiver>
+   <slot>close()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>399</x>
+     <y>246</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>400</x>
+     <y>361</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
