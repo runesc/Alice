@@ -1,4 +1,8 @@
-from AliceInstaller.__main__ import MainApp
+from AliceInstaller.__main__ import *
 
 if __name__ == '__main__':
-    MainApp()
+    app = QApplication([])
+    window = MainApp()
+    window.show()
+    app.exec_()
+    
