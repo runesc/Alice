@@ -1,2 +1,3 @@
-__pycache__/*
-.pyrc
+__pycache__
+
+*.pyrc
