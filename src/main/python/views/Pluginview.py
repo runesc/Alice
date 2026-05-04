@@ -41,17 +41,19 @@ class PluginView(QWidget, PPGLifeCycle, Pydux, Navigable):
             layout.addWidget(QLabel("Ningún plugin seleccionado."))
             return
 
-        btn_back = QPushButton("⬅ Volver al Inicio")
-        btn_back.clicked.connect(lambda: self.navigate("Home"))
-        layout.addWidget(btn_back)
+        btn_back = QPushButton("⬅ Volver al Inicio", clicked=lambda: self.navigate("Home"))
 
         main_app = Pydux.navigator
         plugin_instance = main_app._plugin_manager.get_instance(
             self._current_plugin_id)
-
-        if plugin_instance and hasattr(plugin_instance, "get_main_widget"):
-            plugin_widget = plugin_instance.get_main_widget()
-            layout.addWidget(plugin_widget)
-        else:
+        
+        if not plugin_instance or not hasattr(plugin_instance, "render_"):
             layout.addWidget(
                 QLabel(f"Error: El plugin '{self._current_plugin_id}' no exportó su layout."))
+            layout.addWidget(btn_back)
+            return
+
+        plugin_widget = plugin_instance.render_()
+        layout.addWidget(plugin_widget)
+        layout.addWidget(btn_back)
+

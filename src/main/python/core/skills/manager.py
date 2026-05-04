@@ -1,23 +1,20 @@
 # app/skills/manager.py
 from __future__ import annotations
-import json
 import logging
-import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from core.skills.base import PluginBase
+from core.skills.base import Skill
 from core.skills.context import PluginContext
 from core.skills.dependency import DependencyResolver
-from core.skills.lifecycle import LifecycleManager, plugin_guard
+from core.skills.lifecycle import LifecycleManager
 from core.skills.loader import PluginLoader, get_plugins_dir
 from core.skills.manifest import ManifestLoader
 from core.skills.registry import PluginRecord, PluginRegistry, PluginStatus
 from core.skills.sandbox import PermissionGuard
 from core.api.versioning import is_compatible, CURRENT_API_VERSION
 from core.events.bus import EventBus
-from core.ui.bridge import UIBridge
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +33,28 @@ class PluginManager:
     def __init__(
         self,
         event_bus: EventBus,
-        ui_bridge: UIBridge,
         data_dir: Path,
+        navigate_fn: Callable[[str], None] | None = None,
+        get_screens_fn: Callable[[], list[str]] | None = None,
+        get_current_fn: Callable[[], str] | None = None,
     ) -> None:
         self._bus = event_bus
-        self._bridge = ui_bridge
         self._data_dir = data_dir
         self._plugins_dir = get_plugins_dir()
 
-        self._registry = PluginRegistry()
-        self._loader = PluginLoader()
-        self._guard = PermissionGuard()
-        self._resolver = DependencyResolver(data_dir / "cache" / "packages")
-        self._lifecycle = LifecycleManager(self)
-        self._manifest_loader = ManifestLoader()
+        # Callables de navegación (opcionales, con defaults seguros)
+        self._navigate_fn    = navigate_fn    or (lambda name: None)
+        self._get_screens_fn = get_screens_fn or (lambda: [])
+        self._get_current_fn = get_current_fn or (lambda: "")
+
+        self._registry         = PluginRegistry()
+        self._loader           = PluginLoader()
+        self._guard            = PermissionGuard()
+        self._resolver         = DependencyResolver(data_dir / "cache" / "packages")
+        self._lifecycle        = LifecycleManager(self)
+        self._manifest_loader  = ManifestLoader()
         self._service_registry: dict[str, Any] = {}
-
-        self._instances: dict[str, PluginBase] = {}
-
+        self._instances: dict[str, Skill] = {}
     # ------------------------------------------------------------------ #
     # Discovery                                                            #
     # ------------------------------------------------------------------ #
@@ -158,10 +159,12 @@ class PluginManager:
             plugin_dir=record.plugin_dir,
             data_dir=self._data_dir,
             bus=self._bus,
-            bridge=self._bridge,
             guard=self._guard,
             service_registry=self._service_registry,
             api_version=CURRENT_API_VERSION,
+            navigate_fn=self._navigate_fn,
+            get_screens_fn=self._get_screens_fn,
+            get_current_fn=self._get_current_fn,
         )
 
         try:
@@ -194,7 +197,7 @@ class PluginManager:
         self._registry.set_status(plugin_id, PluginStatus.DISABLED)
         self._bus.emit("core.plugin.disabled", {"plugin_id": plugin_id})
 
-    def get_instance(self, plugin_id: str) -> PluginBase | None:
+    def get_instance(self, plugin_id: str) -> Skill | None:
         return self._instances.get(plugin_id)
 
     def get_registry(self) -> PluginRegistry:

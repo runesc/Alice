@@ -91,6 +91,4 @@ class LifecycleManager:
             return
         with plugin_guard(plugin_id, "on_disable"):
             plugin.on_disable()
-        # Limpiar UI siempre, incluso si on_disable falló
-        plugin.context.ui.unregister_all()
         plugin.context.events.unsubscribe_all()

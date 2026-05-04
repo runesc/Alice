@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "id": "com.example.hello",
+  "name": "Hello Plugin",
+  "version": "1.0.0",
+  "entrypoint": "plugin:HelloPlugin",
+  "permissions": [
+    "nav.navigate",
+    "nav.read_screens",
+    "storage.read",
+    "storage.write",
+    "events.subscribe",
+    "events.emit"
+  ],
+  "api_compatibility": {
+    "min": "1.0.0",
+    "max": "1.x.x"
+  },
+  "dependencies": {
+    "python": [],
+    "plugins": []
+  }
+}

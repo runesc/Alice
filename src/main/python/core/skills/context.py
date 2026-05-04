@@ -1,45 +1,54 @@
 from __future__ import annotations
 import logging
+import json
 from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.skills.sandbox import PermissionGuard
     from core.events.bus import EventBus
-    from core.ui.bridge import UIBridge
 
+class NavAPI:
+    """
+    Permite al plugin navegar entre pantallas de Alice.
+    No recibe la instancia de Myapp — solo callables.
+    
+    Uso en plugin:
+        self.context.nav.go("Home")
+        screens = self.context.nav.screens()
+    """
 
-class UIContext:
-    """Proxy con permisos para acciones UI."""
-
-    def __init__(self, plugin_id: str, bridge: UIBridge, guard: PermissionGuard):
+    def __init__(
+        self,
+        plugin_id: str,
+        guard: PermissionGuard,
+        navigate_fn: Callable[[str], None],
+        get_screens_fn: Callable[[], list[str]],
+        get_current_fn: Callable[[], str],
+    ) -> None:
         self._id = plugin_id
-        self._bridge = bridge
         self._guard = guard
+        self._navigate = navigate_fn
+        self._get_screens = get_screens_fn
+        self._get_current = get_current_fn
 
-    def register_sidebar(self, widget_factory: Callable, title: str, icon: str = "") -> str:
-        self._guard.require(self._id, "ui.sidebar")
-        return self._bridge.add_sidebar(self._id, widget_factory, title, icon)
+    def go(self, screen_name: str) -> None:
+        """Navegar a una pantalla registrada."""
+        self._guard.require(self._id, "nav.navigate")
+        self._navigate(screen_name)
 
-    def register_tab(self, widget_factory: Callable, title: str) -> str:
-        self._guard.require(self._id, "ui.tab")
-        return self._bridge.add_tab(self._id, widget_factory, title)
+    def screens(self) -> list[str]:
+        """Lista de pantallas disponibles."""
+        self._guard.require(self._id, "nav.read_screens")
+        return self._get_screens()
 
-    def register_toolbar_action(self, action_factory: Callable, tooltip: str) -> str:
-        self._guard.require(self._id, "ui.toolbar")
-        return self._bridge.add_toolbar_action(self._id, action_factory, tooltip)
-
-    def show_dialog(self, dialog_factory: Callable) -> Any:
-        self._guard.require(self._id, "ui.dialog")
-        return self._bridge.show_plugin_dialog(self._id, dialog_factory)
-
-    def unregister_all(self) -> None:
-        """Llamado automáticamente en on_disable."""
-        self._bridge.remove_plugin_slots(self._id)
-
+    def current(self) -> str:
+        """Nombre de la pantalla activa."""
+        self._guard.require(self._id, "nav.read_screens")
+        return self._get_current()
 
 class EventsContext:
-    """API de eventos con namespace automático."""
+    """API de eventos con namespace automático por plugin."""
 
     def __init__(self, plugin_id: str, bus: EventBus, guard: PermissionGuard):
         self._id = plugin_id
@@ -51,21 +60,33 @@ class EventsContext:
         self._bus.subscribe(event, handler, plugin_id=self._id, priority=priority)
 
     def emit(self, event: str, payload: Any = None) -> None:
+        """Emite con namespace automático: plugin.{id}.{event}"""
         self._guard.require(self._id, "events.emit")
-        namespaced = f"plugin.{self._id}.{event}"
-        self._bus.emit(namespaced, payload)
+        self._bus.emit(f"plugin.{self._id}.{event}", payload)
 
     def emit_global(self, event: str, payload: Any = None) -> None:
-        """Emitir a eventos del sistema (requiere permiso explícito)."""
+        """Emitir evento global del sistema (permiso explícito requerido)."""
         self._guard.require(self._id, "events.emit.global")
         self._bus.emit(event, payload)
 
+    def on(self, event: str, handler: Callable, priority: int = 0) -> None:
+        """Alias de subscribe, más idiomático para plugins."""
+        self.subscribe(event, handler, priority)
+
+    def once(self, event: str, handler: Callable) -> None:
+        """Suscribirse a un evento una sola vez."""
+        self._guard.require(self._id, "events.subscribe")
+        self._bus.once(event, handler, plugin_id=self._id)
+
     def unsubscribe_all(self) -> None:
+        """Llamado automáticamente en on_disable por LifecycleManager."""
         self._bus.unsubscribe_all(plugin_id=self._id)
 
-
 class StorageContext:
-    """Storage aislado por plugin. Nunca accede a datos de otros plugins."""
+    """
+    Persistencia en disco aislada por plugin.
+    Cada plugin tiene su propio directorio: plugin_data/{plugin_id}/
+    """
 
     def __init__(self, plugin_id: str, data_dir: Path, guard: PermissionGuard):
         self._id = plugin_id
@@ -76,21 +97,21 @@ class StorageContext:
 
     def set(self, key: str, value: Any) -> None:
         self._guard.require(self._id, "storage.write")
-        import json
+        if ".." in key or "/" in key or "\\" in key:
+            raise ValueError(f"Clave inválida: '{key}'")
         path = self._dir / f"{key}.json"
-        path.write_text(json.dumps(value), encoding="utf-8")
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
         self._cache[key] = value
 
     def get(self, key: str, default: Any = None) -> Any:
         self._guard.require(self._id, "storage.read")
         if key in self._cache:
             return self._cache[key]
-        import json
         path = self._dir / f"{key}.json"
         if path.exists():
-            v = json.loads(path.read_text(encoding="utf-8"))
-            self._cache[key] = v
-            return v
+            val = json.loads(path.read_text(encoding="utf-8"))
+            self._cache[key] = val
+            return val
         return default
 
     def delete(self, key: str) -> None:
@@ -100,29 +121,34 @@ class StorageContext:
             path.unlink()
         self._cache.pop(key, None)
 
+    def keys(self) -> list[str]:
+        self._guard.require(self._id, "storage.read")
+        return [p.stem for p in self._dir.glob("*.json")]
+
     @property
     def plugin_dir(self) -> Path:
-        """Directorio raíz de assets del plugin (solo lectura)."""
+        """Directorio raíz del plugin (assets, etc.)."""
         return self._dir
 
 
 class ServicesContext:
     """Acceso a servicios registrados por otros plugins (IPC seguro)."""
+    """Registro de servicios públicos entre plugins."""
 
     def __init__(self, plugin_id: str, registry: dict, guard: PermissionGuard):
         self._id = plugin_id
         self._registry = registry
         self._guard = guard
 
-    def get_service(self, service_id: str) -> Any:
-        """Obtener un servicio público registrado por otro plugin."""
+    def get(self, service_id: str) -> Any:
+        """Consumir un servicio publicado por otro plugin."""
         svc = self._registry.get(service_id)
         if svc is None:
-            raise KeyError(f"Service '{service_id}' not found")
-        return svc["interface"]  # Solo se expone la interfaz, nunca el objeto real
+            raise KeyError(f"Servicio '{service_id}' no encontrado.")
+        return svc["interface"]
 
-    def register_service(self, service_id: str, interface: Any) -> None:
-        """Publicar un servicio para que otros plugins lo consuman."""
+    def register(self, service_id: str, interface: Any) -> None:
+        """Publicar un servicio para otros plugins."""
         self._registry[service_id] = {
             "provider": self._id,
             "interface": interface,
@@ -131,9 +157,17 @@ class ServicesContext:
 
 class PluginContext:
     """
-    Contexto completo entregado a cada plugin.
-    Encapsula toda la API del framework — los plugins nunca
-    importan nada del core directamente.
+    Objeto único entregado a cada plugin en su constructor.
+    
+    APIs disponibles:
+        context.nav            → navegar entre pantallas de Alice
+        context.events         → suscribirse y emitir eventos
+        context.local_storage  → persistencia en disco aislada
+        context.services       → IPC con otros plugins
+        context.logger         → logging con nombre del plugin
+        context.get_asset(p)   → ruta segura a assets del plugin
+    
+    CONTRATO: los plugins nunca importan nada de core.* directamente.
     """
 
     def __init__(
@@ -142,26 +176,28 @@ class PluginContext:
         plugin_dir: Path,
         data_dir: Path,
         bus: EventBus,
-        bridge: UIBridge,
         guard: PermissionGuard,
         service_registry: dict,
         api_version: str,
+        # Callables del core — no referencias a objetos reales
+        navigate_fn: Callable[[str], None],
+        get_screens_fn: Callable[[], list[str]],
+        get_current_fn: Callable[[], str],
     ):
-        self.plugin_id = plugin_id
+        self.plugin_id   = plugin_id
         self.api_version = api_version
+        self.logger      = logging.getLogger(f"plugin.{plugin_id}")
 
-        self.ui       = UIContext(plugin_id, bridge, guard)
-        self.events   = EventsContext(plugin_id, bus, guard)
-        self.storage  = StorageContext(plugin_id, data_dir, guard)
-        self.services = ServicesContext(plugin_id, service_registry, guard)
-        self.logger   = logging.getLogger(f"plugin.{plugin_id}")
-
-        # Paths útiles (solo lectura desde el plugin)
         self._plugin_dir = plugin_dir
 
-    def get_asset_path(self, relative: str) -> Path:
-        """Ruta segura a assets del plugin."""
-        path = (self._plugin_dir / relative).resolve()
-        if not str(path).startswith(str(self._plugin_dir.resolve())):
-            raise PermissionError("Path traversal detectado")
-        return path
+        self.nav           = NavAPI(plugin_id, guard, navigate_fn, get_screens_fn, get_current_fn)
+        self.events        = EventsContext(plugin_id, bus, guard)
+        self.local_storage = StorageContext(plugin_id, data_dir, guard)
+        self.services      = ServicesContext(plugin_id, service_registry, guard)
+
+    def get_asset(self, relative: str) -> Path:
+        """Ruta segura a un asset del plugin. Previene path traversal."""
+        resolved = (self._plugin_dir / relative).resolve()
+        if not str(resolved).startswith(str(self._plugin_dir.resolve())):
+            raise PermissionError("Path traversal detectado.")
+        return resolved

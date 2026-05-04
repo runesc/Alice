@@ -6,20 +6,25 @@ logger = logging.getLogger(__name__)
 
 
 class Permission(str, Enum):
-    UI_SIDEBAR      = "ui.sidebar"
-    UI_TAB          = "ui.tab"
-    UI_TOOLBAR      = "ui.toolbar"
-    UI_DIALOG       = "ui.dialog"
-    STORAGE_READ    = "storage.read"
-    STORAGE_WRITE   = "storage.write"
+    # Navegación (NUEVO)
+    NAV_NAVIGATE     = "nav.navigate"
+    NAV_READ_SCREENS = "nav.read_screens"
+    
+    # Los que ya tienes
+    UI_SIDEBAR       = "ui.sidebar"
+    UI_TAB           = "ui.tab"
+    UI_TOOLBAR       = "ui.toolbar"
+    UI_DIALOG        = "ui.dialog"
+    STORAGE_READ     = "storage.read"
+    STORAGE_WRITE    = "storage.write"
     EVENTS_SUBSCRIBE = "events.subscribe"
-    EVENTS_EMIT     = "events.emit"
+    EVENTS_EMIT      = "events.emit"
     EVENTS_EMIT_GLOBAL = "events.emit.global"
-    NETWORK_HTTP    = "network.http"
-    NETWORK_WS      = "network.ws"
-    SHELL_EXEC      = "shell.exec"   # Requiere revisión manual
-    FS_READ         = "fs.read"      # Solo fuera del directorio app
-    FS_WRITE        = "fs.write"
+    NETWORK_HTTP     = "network.http"
+    NETWORK_WS       = "network.ws"
+    SHELL_EXEC       = "shell.exec" #! Muy peligroso, usar con extremo cuidado, requiere validación manual del usuario
+    FS_READ          = "fs.read"
+    FS_WRITE         = "fs.write"
 
 
 # Permisos que requieren aprobación explícita del usuario (como Android)

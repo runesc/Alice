@@ -15,14 +15,13 @@ from views.Pluginview import PluginView
 from core.Navigable import Navigable
 
 from core.events.bus import EventBus
-from core.ui.bridge import UIBridge
 from core.skills.manager import PluginManager
 from core.database import PluginDB
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(name)s] %(levelname)s — %(message)s",
-    filename="debug.log",  # <--- Agrega esto
+    filename="debug.log",
     filemode="w"
 )
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
         Pydux.navigator = self
 
         data_dir = Path(self.get_resource('plugin_data'))
-        self.plugin_db = PluginDB(data_dir / "plugins.db")
+        self.plugin_db = PluginDB(data_dir / "plugins.sqlite3")
 
         self.set_schema({
             "activities": Activities,
@@ -67,12 +66,19 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
         })
 
         self._event_bus = EventBus()
-        self._ui_bridge = UIBridge(self)
 
         self._plugin_manager = PluginManager(
             event_bus=self._event_bus,
-            ui_bridge=self._ui_bridge,
             data_dir=data_dir,
+            navigate_fn=lambda name: self.navigate(name),
+            get_screens_fn=lambda: [
+                a["name"]
+                for a in self.store["activities"]["screens"]
+            ],
+            get_current_fn=lambda: (
+                self.store["activities"]["screens"]
+                [self.store["activities"]["idx"]]["name"]
+            ),
         )
 
 

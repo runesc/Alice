@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from core.skills.context import PluginContext
 
 
-class PluginBase(ABC):
+class Skill(ABC):
     """
     Clase base que todo plugin debe extender.
 
