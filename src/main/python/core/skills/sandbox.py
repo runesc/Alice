@@ -6,15 +6,8 @@ logger = logging.getLogger(__name__)
 
 
 class Permission(str, Enum):
-    # Navegación (NUEVO)
     NAV_NAVIGATE     = "nav.navigate"
     NAV_READ_SCREENS = "nav.read_screens"
-    
-    # Los que ya tienes
-    UI_SIDEBAR       = "ui.sidebar"
-    UI_TAB           = "ui.tab"
-    UI_TOOLBAR       = "ui.toolbar"
-    UI_DIALOG        = "ui.dialog"
     STORAGE_READ     = "storage.read"
     STORAGE_WRITE    = "storage.write"
     EVENTS_SUBSCRIBE = "events.subscribe"

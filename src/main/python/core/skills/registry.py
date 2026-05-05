@@ -13,6 +13,7 @@ class PluginStatus(str, Enum):
     DISABLED    = "disabled"     # on_disable ejecutado
     ERROR       = "error"        # falló en alguna fase
     INCOMPATIBLE = "incompatible" # versión API no compatible
+    PERMISSIONS_REJECTED = "permissions_rejected" # el usuario rechazó permisos requeridos
 
 
 @dataclass

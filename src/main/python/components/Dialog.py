@@ -14,13 +14,13 @@ class Dialog(QMessageBox, PPGLifeCycle):
 
     def render_(self):
         self.setIcon(QMessageBox.Warning)
-        self.setWindowTitle("Permisos Peligrosos")
+        self.setWindowTitle("Required Permissions")
         self.setText(
-            f"El plugin '{self.plugin_name}' requiere permisos peligrosos:")
+            f"The plugin '{self.plugin_name}' requires permissions:")
 
         perm_details = "\n".join(f"• {perm}" for perm in self.dangerous_perms)
         self.setInformativeText(
-            f"Permisos:\n{perm_details}\n\n¿Desea continuar?")
+            f"Requested Permissions:\n{perm_details}\n\nDo you want to continue?\n\nAccepting will allow this plugin to access to restricted features, which may involve risks. Only accept if you trust the plugin and understand why it needs these permissions.")
         self.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         self.setDefaultButton(QMessageBox.No)
 

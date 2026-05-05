@@ -21,7 +21,6 @@ from core.skills.loader import get_resource
 
 logger = logging.getLogger(__name__)
 
-
 class PluginManager:
     """
     Orquestador central del sistema de plugins.
