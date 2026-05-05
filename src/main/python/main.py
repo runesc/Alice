@@ -92,10 +92,10 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
 
         active_count = 0
         try:
+            self._plugin_manager.load_all()
             for p in self.store["installed_plugins"]:
                 if p["enabled"]:
-                    if self._plugin_manager.load_plugin(p["id"]):
-                        self._plugin_manager.enable_plugin(p["id"])
+                    if self._plugin_manager.enable_plugin(p["id"]):
                         active_count += 1
 
             self.update_store({

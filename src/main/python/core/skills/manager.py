@@ -1,7 +1,7 @@
-# app/skills/manager.py
 from __future__ import annotations
 import logging
 import time
+import shutil
 from pathlib import Path
 from typing import Any, Callable
 
@@ -15,6 +15,9 @@ from core.skills.registry import PluginRecord, PluginRegistry, PluginStatus
 from core.skills.sandbox import PermissionGuard
 from core.api.versioning import is_compatible, CURRENT_API_VERSION
 from core.events.bus import EventBus
+from core.database import PluginDB
+from core.skills.loader import get_resource
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,21 +46,21 @@ class PluginManager:
         self._plugins_dir = get_plugins_dir()
 
         # Callables de navegación (opcionales, con defaults seguros)
-        self._navigate_fn    = navigate_fn    or (lambda name: None)
+        self._navigate_fn = navigate_fn or (lambda name: None)
         self._get_screens_fn = get_screens_fn or (lambda: [])
         self._get_current_fn = get_current_fn or (lambda: "")
 
-        self._registry         = PluginRegistry()
-        self._loader           = PluginLoader()
-        self._guard            = PermissionGuard()
-        self._resolver         = DependencyResolver(data_dir / "cache" / "packages")
-        self._lifecycle        = LifecycleManager(self)
-        self._manifest_loader  = ManifestLoader()
+        self._registry = PluginRegistry()
+        self._loader = PluginLoader()
+        self._guard = PermissionGuard()
+        self._resolver = DependencyResolver(data_dir / "cache" / "packages")
+        self._lifecycle = LifecycleManager(self)
+        self._manifest_loader = ManifestLoader()
         self._service_registry: dict[str, Any] = {}
         self._instances: dict[str, Skill] = {}
-    # ------------------------------------------------------------------ #
-    # Discovery                                                            #
-    # ------------------------------------------------------------------ #
+        self.plugin_db = PluginDB(get_resource("plugin_data/plugins.sqlite3"))
+
+        logger.warning(self.plugin_db)
 
     def discover(self) -> list[PluginRecord]:
         """
@@ -89,10 +92,6 @@ class PluginManager:
             except Exception as e:
                 logger.error(f"Manifest inválido en '{plugin_dir.name}': {e}")
         return discovered
-
-    # ------------------------------------------------------------------ #
-    # Loading pipeline                                                     #
-    # ------------------------------------------------------------------ #
 
     def load_all(self) -> None:
         """Cargar todos los plugins descubiertos en orden de dependencias."""
@@ -137,6 +136,17 @@ class PluginManager:
         # Registrar permisos
         permissions = record.manifest.get("permissions", [])
         self._guard.register_plugin(plugin_id, permissions)
+
+        dangerous_perms = self._guard.get_dangerous_permissions(plugin_id)
+
+        if dangerous_perms and not self.plugin_db.has_permission_approval(plugin_id):
+            if not self._alert_dangerous_permissions(plugin_id, record.name, dangerous_perms):
+                logger.info(
+                    f"Usuario rechazó permisos peligrosos de '{plugin_id}'")
+                self._registry.set_status(
+                    plugin_id, PluginStatus.PERMISSIONS_REJECTED)
+                return False
+            self.plugin_db.set_permission_approval(plugin_id, True)
 
         # Importar módulo
         try:
@@ -202,3 +212,34 @@ class PluginManager:
 
     def get_registry(self) -> PluginRegistry:
         return self._registry
+
+    def _alert_dangerous_permissions(self, plugin_id: str, plugin_name: str, dangerous_perms: set[str]) -> bool:
+        from components.Dialog import Dialog
+        Dialog.plugin_id = plugin_id
+        Dialog.plugin_name = plugin_name
+        Dialog.dangerous_perms = dangerous_perms
+        dialog = Dialog()
+
+        return dialog.accepted_by_user
+
+    def uninstall_plugin(self, plugin_id: str) -> bool:
+        """Uninstalls a plugin and remove it from fs and db linker
+
+        Args:
+            plugin_id (str): the id of the plugin to uninstall
+
+        Returns:
+            bool: True if the plugin was uninstalled successfully, False otherwise
+        """
+
+        self.disable_plugin(plugin_id)
+        record = self._registry.get(plugin_id)
+        if not record:
+            logger.error(f"Plugin '{plugin_id}' no registrado")
+            return False
+
+        shutil.rmtree(record.plugin_dir)
+        self._instances.pop(plugin_id, None)
+        self.plugin_db.remove_plugin(plugin_id)
+
+        return True

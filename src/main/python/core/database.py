@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
+import logging
 
+logger = logging.getLogger(__name__)
 class PluginDB:
     def __init__(self, db_path: Path):
         self.conn = sqlite3.connect(db_path)
@@ -13,9 +15,16 @@ class PluginDB:
                 id TEXT PRIMARY KEY,
                 name TEXT,
                 version TEXT,
-                enabled INTEGER DEFAULT 0
+                enabled INTEGER DEFAULT 0,
+                permissions_approved INTEGER DEFAULT 0
             )
         """)
+
+        try:
+            self.conn.execute("ALTER TABLE plugins ADD COLUMN permissions_approved INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            logger.info("Columna 'permissions_approved' ya existe en la tabla 'plugins'.")
+
         self.conn.commit()
 
     def get_all_plugins(self) -> list[dict]:
@@ -32,3 +41,21 @@ class PluginDB:
                 version=excluded.version
         """, (plugin_id, name, version, enabled))
         self.conn.commit()
+
+    def remove_plugin(self, plugin_id: str):
+        self.conn.execute("DELETE FROM plugins WHERE id = ?", (plugin_id,))
+        self.conn.commit()
+
+    def set_permission_approval(self, plugin_id: str, approved: bool):
+        self.conn.execute('''
+            UPDATE plugins SET permissions_approved = ? WHERE id = ?
+        ''', (approved, plugin_id))
+        self.conn.commit()
+
+    def has_permission_approval(self, plugin_id: str) -> bool:  
+        cursor = self.conn.cursor()  
+        cursor.execute('''  
+            SELECT permissions_approved FROM plugins WHERE id = ?  
+        ''', (plugin_id,))  
+        result = cursor.fetchone()  
+        return result[0] if result else False

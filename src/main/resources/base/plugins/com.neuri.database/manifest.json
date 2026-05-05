@@ -1,17 +1,12 @@
 {
   "schema_version": "1",
-  "id": "com.example.hello",
-  "name": "Hello Plugin",
+  "id": "com.neuri.database",
+  "name": "Database Plugin",
   "version": "1.0.0",
-  "entrypoint": "plugin:HelloPlugin",
+  "entrypoint": "database_plugin:DatabasePlugin",
   "permissions": [
-    "nav.navigate",
-    "nav.read_screens",
     "storage.read",
-    "storage.write",
-    "events.subscribe",
-    "events.emit",
-    "shell.exec"
+    "storage.write"
   ],
   "api_compatibility": {
     "min": "1.0.0",

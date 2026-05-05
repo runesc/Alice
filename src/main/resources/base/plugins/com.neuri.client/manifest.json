@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "id": "com.neuri.client",
+  "name": "Client Plugin",
+  "version": "1.0.0",
+  "entrypoint": "client_plugin:ClientPlugin",
+  "permissions": [
+    "nav.navigate",
+    "nav.read_screens"
+  ],
+  "api_compatibility": {
+    "min": "1.0.0",
+    "max": "1.x.x"
+  },
+  "dependencies": {
+    "python": [],
+    "plugins": [{"id": "com.neuri.database"}]
+  }
+}

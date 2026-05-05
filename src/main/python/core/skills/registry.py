@@ -77,3 +77,7 @@ class PluginRegistry:
             }
             for r in self._plugins.values()
         ]
+    
+    def remove(self, plugin_id: str) -> None:
+        if plugin_id in self._plugins:
+            del self._plugins[plugin_id]
