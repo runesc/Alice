@@ -5,7 +5,6 @@ import re
 
 CURRENT_API_VERSION = "1.0.0"
 
-
 @dataclass(frozen=True)
 class SemVer:
     major: int

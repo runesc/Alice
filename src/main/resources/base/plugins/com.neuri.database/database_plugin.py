@@ -1,6 +1,5 @@
 from core.skills.base import Skill
 import sqlite3
-from pathlib import Path
 
 class DatabasePlugin(Skill):
     def on_load(self):

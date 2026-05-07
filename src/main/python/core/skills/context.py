@@ -2,11 +2,114 @@ from __future__ import annotations
 import logging
 import json
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, Optional, TYPE_CHECKING
+import wave
+import vosk
+import threading
+from core.skills.loader import get_resource
 
 if TYPE_CHECKING:
     from core.skills.sandbox import PermissionGuard
     from core.events.bus import EventBus
+
+logger = logging.getLogger(__name__)
+
+class SpeechContext:
+    def __init__(self, plugin_id: str, guard: 'PermissionGuard'):
+        self._id = plugin_id
+        self._guard = guard
+        self._model: Optional[vosk.Model] = None
+        self._recognizer: Optional[vosk.KaldiRecognizer] = None
+        self._model_lock = threading.Lock()
+
+    def initialize_model(self, model_name: str) -> None:
+        """Inicializar modelo Vosk (requiere permiso)."""
+        self._guard.require(self._id, "speech.model.load")
+
+        with self._model_lock:
+            if self._model is not None:
+                self._model = None
+                self._recognizer = None
+
+            model_path_obj = Path(get_resource("models/asr")) / model_name
+            if not model_path_obj.exists():
+                raise FileNotFoundError(
+                    f"Modelo Vosk no encontrado: {model_path_obj}")
+
+            self._model = vosk.Model(str(model_path_obj))
+            self._recognizer = vosk.KaldiRecognizer(self._model, 16000)
+
+    def recognize_file(self, file_path: str) -> str:
+        """Reconocer audio desde un archivo (requiere permiso)."""
+        self._guard.require(self._id, "speech.recognize")
+
+        if self._model is None or self._recognizer is None:
+            raise RuntimeError(
+                "Modelo Vosk no inicializado. Llama a initialize_model() primero.")
+
+        audio_path = Path(file_path)
+
+        if not audio_path.exists():
+            raise FileNotFoundError(
+                f"Archivo de audio no encontrado: {file_path}")
+
+        with wave.open(str(audio_path), "rb") as wf:
+            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() != 16000:
+                raise ValueError(
+                    "El archivo de audio debe ser WAV, mono, 16-bit, 16kHz.")
+
+            data = wf.readframes(wf.getnframes())
+
+        if self._recognizer.AcceptWaveform(data):
+            result = json.loads(self._recognizer.Result())
+            return result.get('text', '')
+        else:
+            result = json.loads(self._recognizer.FinalResult())
+            return result.get('text', '')
+
+    def recognize_stream(self, audio_data: bytes) -> str:
+        """Reconocer audio desde un stream de bytes (requiere permiso)."""
+        self._guard.require(self._id, "speech.recognize")
+
+        if self._model is None or self._recognizer is None:
+            raise RuntimeError(
+                "Modelo Vosk no inicializado. Llama a initialize_model() primero.")
+
+        if self._recognizer.AcceptWaveform(audio_data):
+            result = json.loads(self._recognizer.Result())
+            return result.get('text', '')
+        else:
+            result = json.loads(self._recognizer.FinalResult())
+            return result.get('text', '')
+
+    def get_final_result(self) -> str:
+        """Obtener resultado final del reconocimiento (requiere permiso)."""
+        self._guard.require(self._id, "speech.recognize")
+
+        if self._model is None or self._recognizer is None:
+            raise RuntimeError(
+                "Modelo Vosk no inicializado. Llama a initialize_model() primero.")
+
+        result = json.loads(self._recognizer.FinalResult())
+        return result.get('text', '')
+
+    def reset_recognizer(self) -> None:
+        """Reiniciar el reconocedor (requiere permiso)."""
+        self._guard.require(self._id, "speech.recognize")
+
+        if self._model is None:
+            raise RuntimeError(
+                "Modelo Vosk no inicializado. Llama a initialize_model() primero.")
+
+        self._recognizer = vosk.KaldiRecognizer(self._model, 16000)
+
+    def cleanup(self) -> None:
+        """Limpiar recursos del modelo (requiere permiso)."""
+        self._guard.require(self._id, "speech.model.load")
+
+        with self._model_lock:
+            self._model = None
+            self._recognizer = None
 
 class NavAPI:
     """
@@ -164,6 +267,7 @@ class PluginContext:
         context.events         → suscribirse y emitir eventos
         context.local_storage  → persistencia en disco aislada
         context.services       → IPC con otros plugins
+        context.speech         → voz a texto usando Vosk
         context.logger         → logging con nombre del plugin
         context.get_asset(p)   → ruta segura a assets del plugin
     
@@ -194,6 +298,7 @@ class PluginContext:
         self.events        = EventsContext(plugin_id, bus, guard)
         self.local_storage = StorageContext(plugin_id, data_dir, guard)
         self.services      = ServicesContext(plugin_id, service_registry, guard)
+        self.speech = SpeechContext(plugin_id, guard)
 
     def get_asset(self, relative: str) -> Path:
         """Ruta segura a un asset del plugin. Previene path traversal."""
@@ -201,3 +306,4 @@ class PluginContext:
         if not str(resolved).startswith(str(self._plugin_dir.resolve())):
             raise PermissionError("Path traversal detectado.")
         return resolved
+

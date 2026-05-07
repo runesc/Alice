@@ -18,6 +18,8 @@ class Permission(str, Enum):
     SHELL_EXEC       = "shell.exec" #! Muy peligroso, usar con extremo cuidado, requiere validación manual del usuario
     FS_READ          = "fs.read"
     FS_WRITE         = "fs.write"
+    SPEECH_MODEL_LOAD = "speech.model.load"
+    SPEECH_RECOGNIZE = "speech.recognize"
 
 
 # Permisos que requieren aprobación explícita del usuario (como Android)

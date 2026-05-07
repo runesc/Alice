@@ -1,6 +1,7 @@
 import sys
 import logging
 from pathlib import Path
+import threading
 from ppg_runtime.application_context.PySide6 import ApplicationContext
 from ppg_runtime.application_context import PPGLifeCycle, Pydux, init_lifecycle
 from ppg_runtime.application_context.devtools.reloader import hot_reloading
@@ -17,6 +18,7 @@ from core.Navigable import Navigable
 from core.events.bus import EventBus
 from core.skills.manager import PluginManager
 from core.database import PluginDB
+from core.AIKit.asr import SpeechAPI
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -39,6 +41,7 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
 
         data_dir = Path(self.get_resource('plugin_data'))
         self.plugin_db = PluginDB(data_dir / "plugins.sqlite3")
+        self.speech_instance = SpeechAPI(lang="es")
 
         self.set_schema({
             "activities": Activities,
@@ -46,7 +49,10 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
             "active_plugin_count": int,
             "plugin_errors": list,
             "installed_plugins": list,
-            "active_plugin_id": str | None
+            "active_plugin_id": str | None,
+            "speech_api": SpeechAPI,
+            "asr_ready": bool,
+            "is_listening": bool
         })
 
         self.update_store({
@@ -62,7 +68,10 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
             "active_plugin_count": 0,
             "plugin_errors": [],
             "installed_plugins": self.plugin_db.get_all_plugins(),
-            "active_plugin_id": None
+            "active_plugin_id": None,
+            "speech_api": self.speech_instance,
+            "asr_ready": False,
+            "is_listening": False
         })
 
         self._event_bus = EventBus()
@@ -80,7 +89,7 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
                 [self.store["activities"]["idx"]]["name"]
             ),
         )
-
+        self.load_speech_model()
 
         for record in self._plugin_manager.discover():
             self.plugin_db.upsert_plugin(
@@ -162,6 +171,8 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
             self.stack.setCurrentIndex(current_idx)
             self.prev_screen_idx = current_idx
 
+        logger.debug(f"Store updated: {state.model_dump()}")
+
     def responsive_UI(self):
         self.setMinimumSize(640, 480)
 
@@ -186,6 +197,16 @@ class Myapp(QMainWindow, PPGLifeCycle, Pydux, Navigable):
                 self._plugin_manager.load_plugin(plugin_id),
                 self._plugin_manager.enable_plugin(plugin_id),
             ))
+
+    def load_speech_model(self):
+        def _task():
+            try:
+                self.speech_instance.initialize_model("es")
+                self.update_store({'asr_ready': True})
+            except Exception as e:
+                raise RuntimeError(f"Error al inicializar ASR: {e}")
+
+        threading.Thread(target=_task, daemon=True).start()
 
 
 if __name__ == '__main__':
