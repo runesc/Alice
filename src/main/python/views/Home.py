@@ -62,28 +62,18 @@ class Home(QWidget, PPGLifeCycle, Pydux, Navigable):
         layout.addWidget(btn_mic)
 
     def toggle_voice(self):
-        import threading # Asegúrate de tener el import
-        ctx: SpeechAPI = self.store.get("speech_api") 
+        ctx: SpeechAPI = self.store.get("speech_api")
         currently_listening = self.store.get("is_listening", False)
 
-        if not ctx:
-            logger.error("No se encontró SpeechAPI en el Store")
-            return
+        if not ctx: return
 
         if currently_listening:
             ctx.stop_stream()
             self.update_store({"is_listening": False})
         else:
-            # 1. Actualizamos el estado primero
             self.update_store({"is_listening": True})
-            
-            # 2. Ejecutamos el reconocimiento en un hilo separado
-            # para NO bloquear el renderizado del botón "Detener"
-            threading.Thread(
-                target=ctx.recognize_stream, 
-                kwargs={'callback': self.on_speech_recognized},
-                daemon=True
-            ).start()
+            ctx.recognize_in_background(callback=self.on_speech_recognized)
+
 
     def on_speech_recognized(self, text):
         print(f"Escuché: {text}")
